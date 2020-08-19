@@ -58,7 +58,7 @@ You have to write to /proc/self/mem :: https://bugzilla.redhat.com/show_bug.cgi?
 >  the race it writes to /proc/self/mem, but /proc/self/mem is not
 >  writable on Red Hat Enterprise Linux 5 and 6.
 */
-  int f=open("/proc/self/mem",O_RDWR);
+  int f=open("/proc/self/mem",O_RDWR)
   int i,c=0;
   for(i=0;i<100000000;i++) {
 /*
